@@ -58,4 +58,5 @@ cb2.open()
 #cb.debug_print()
 thumb_provider.JobManager.start()
 while True:
-    time.sleep(5)
+    print "main heartbeat ..."
+    time.sleep(2)

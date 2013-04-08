@@ -6,36 +6,70 @@ import thread
 import time
 
 
+class JobRunner:
+    def __init__(self, runner_id):
+        self.current_job = None
+        self.runner_id = runner_id
+
+    def is_ready(self):
+        if self.current_job:
+            return False
+        return True
+
+    def notify_status(self, status):
+        if status == 0:
+            self.current_job = None
+
+    def process_job(self, job):
+        if not self.current_job:
+            self.current_job = job
+            print "running job %s with runner id %d ..." % (job.jobid, self.runner_id)
+            thread.start_new_thread(job.run, (self,))
+
+
 class JobManager:
 
-    job_list = []
+    waiting_jobs = []
+    running_jobs = []
     running = False
 
     @classmethod
     def add_job(cls, job):
-        for item in JobManager.job_list:
+        for item in JobManager.waiting_jobs:
             if item.is_equal(job):
                 return
-        JobManager.job_list.append(job)
+        JobManager.waiting_jobs.append(job)
+
+
+    @classmethod
+    def get_free_slot(cls):
+        for jRunner in JobManager.running_jobs:
+            if jRunner.is_ready():
+                return jRunner
+        None
+
 
     @classmethod
     def threadrunner(cls):
-        while len(JobManager.job_list) > 0:
-            current_job = JobManager.job_list.pop(0)
-            print "running job %s" % current_job.jobid
-            current_job.run()
-            time.sleep(0.2)
+        while True:
+            if len(JobManager.waiting_jobs) > 0:
+                current_job = JobManager.waiting_jobs.pop(0)
+                slot = JobManager.get_free_slot()
+                while not slot:
+                    time.sleep(0.1)
+                    slot = JobManager.get_free_slot()
+                slot.process_job(current_job)
 
     @classmethod
     def start(cls):
         if not JobManager.running:
+            JobManager.running_jobs.append(JobRunner(1))
+            JobManager.running_jobs.append(JobRunner(2))
+            JobManager.running_jobs.append(JobRunner(3))
+            #JobManager.running_jobs.append(JobRunner(4))
+            #JobManager.running_jobs.append(JobRunner(5))
             JobManager.running = True
             thread.start_new_thread(JobManager.threadrunner, ())
-            while True:
-                time.sleep(5)
-                print "Thread hearbeat ..." 
-                print "%d jobs remaining " % len(JobManager.job_list)
-
 
 class ResizeJob:
 
@@ -52,9 +86,11 @@ class ResizeJob:
         image_data = self.data_provider.read(self.org_name)
         p.communicate(image_data)
 
-    def run(self):
+    def run(self, status_listener):
         self.create_thumbnail_to_file()
         ThumbProvider.add_thumbnail(self.file_id, self.org_name, self.output_file)
+        if status_listener:
+            status_listener.notify_status(0)
 
     def is_equal(self, other_job):
         if self.jobid == other_job.jobid:
